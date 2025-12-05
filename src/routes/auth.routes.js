@@ -14,11 +14,12 @@ router.post('/hr/register', async (req, res) => {
     try {
         const db = getDB();
         const hrCollection = db.collection("HRs");
+        const usersCollection = db.collection("users");
 
 
         const existingUser = await hrCollection.findOne({ email });
         if (existingUser) {
-            res.status(400).json({ message: "User already exists" });
+            return res.status(400).json({ message: "User already exists" });
         }
 
         const newHR = {
@@ -34,15 +35,31 @@ router.post('/hr/register', async (req, res) => {
             firebaseUID: "test"
         }
 
+        const newUser = {
+            name,
+            email,
+            role:"hr",
+            companyName,
+            companyLogo,
+            packageLimit: 5,
+            currentEmployees: 0,
+            subscription: 'basic',
+            dateOfBirth,
+            profileImage: 'nope',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }
+
+
         const result = await hrCollection.insertOne(newHR);
-        res.status(201).json({ message: 'HR registered successfully', userId: result.insertedId });
+        const userResult = await usersCollection.insertOne(newUser)
+        res.status(201).json({ message: 'HR registered successfully' });
 
     }
     catch (err) {
         res.status(500).json({ message: "Internal server error" });
     }
 })
-
 
 router.post('/employee/register', async (req, res) => {
     const { name, email, dateOfBirth } = req.body;
@@ -53,10 +70,12 @@ router.post('/employee/register', async (req, res) => {
     try {
         const db = getDB();
         const employeeCollection = db.collection('employees');
+        const usersCollection = db.collection("users");
+
 
         const existingUser = await employeeCollection.findOne({ email });
         if (existingUser) {
-            res.status(400).json({ message: "User already exists" });
+            return res.status(400).json({ message: "User already exists" });
         }
 
         const newEmployee = {
@@ -67,8 +86,19 @@ router.post('/employee/register', async (req, res) => {
             firebaseUID: 'test'
         }
 
-        const result = await employeeCollection.insertOne(newEmployee);
+        const newUser = {
+            name,
+            email,
+            role:"employee",
+            dateOfBirth,
+            profileImage: 'nope',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }
 
+
+        const result = await employeeCollection.insertOne(newEmployee);
+        const userResult = await usersCollection.insertOne(newUser)
         res.status(201).json({ message: 'Employee registered successfully', userId: result.insertedId });
 
     }
@@ -77,5 +107,7 @@ router.post('/employee/register', async (req, res) => {
 
     }
 })
+
+
 
 export default router;
