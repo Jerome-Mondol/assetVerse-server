@@ -1,5 +1,7 @@
 import express from 'express'
 import { getDB } from '../config/db.js';
+import { generateToken } from '../utils/jwt.js';
+import { verifyJWT, verifyRole } from '../middlewares/auth.js';
 
 
 
@@ -38,7 +40,7 @@ router.post('/hr/register', async (req, res) => {
         const newUser = {
             name,
             email,
-            role:"hr",
+            role: "hr",
             companyName,
             companyLogo,
             packageLimit: 5,
@@ -89,7 +91,7 @@ router.post('/employee/register', async (req, res) => {
         const newUser = {
             name,
             email,
-            role:"employee",
+            role: "employee",
             dateOfBirth,
             profileImage: 'nope',
             createdAt: new Date(),
@@ -109,5 +111,32 @@ router.post('/employee/register', async (req, res) => {
 })
 
 
+router.post('/login', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ message: "Email    required" });
+
+    try {
+        const db = getDB();
+        const usersCollection = db.collection('users');
+
+        const user = await usersCollection.findOne({ email });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        const token = generateToken(user);
+        console.log(token);
+        res.status(200).json({
+            message: "Login successful",
+            token
+        })
+    }
+    catch (err) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+})
+
+router.get('/hr/dashboard', verifyJWT, verifyRole('hr'), (req, res) => {
+    res.send("HR dashboard")
+})
 
 export default router;
