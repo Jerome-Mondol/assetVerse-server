@@ -54,27 +54,54 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
     try {
         const db = getDB();
         const requestsCollection = db.collection('requests');
+        const affiliationCollection = db.collection('affiliations');
+        const hrCollection = db.collection('hrs');
 
-        const result = await requestsCollection.updateOne({ _id: new ObjectId(id) },
+        
+        const request = await requestsCollection.findOne({ _id: new ObjectId(id) });
+        if (!request) {
+            return res.status(404).json({ message: "Request not found" });
+        }
+        if(request.requestStatus !== 'pending') return res.status(400).json({ message: "Decision already given" })
+
+        const companyDetails = await hrCollection.findOne({ email: request.hrEmail });
+
+        await requestsCollection.updateOne(
+            { _id: new ObjectId(id) },
             {
                 $set: {
                     approvalDate: new Date(),
                     requestStatus: 'approved',
                     processedBy: req.user.email
                 }
-            })
-        if (result.modifiedCount === 0) {
-            return res.status(404).json({ message: "Request not found" });
+            }
+        );
+
+
+
+
+        const affiliation = {
+            employeeEmail: request.requesterEmail,
+            employeeName: request.requesterName,
+            hrEmail: request.hrEmail,
+            companyName: companyDetails.companyName,
+            companyLogo: companyDetails.companyLogo,
+            affiliationDate: new Date(),
+            status: 'active',
         }
 
-        res.status(200).json({ message: "Request accepted" })
-    }
-    catch (err) {
-        console.log(err);
-        res.status(500).json({ message: "internal server error" })
-    }
 
-})
+
+        await affiliationCollection.insertOne(affiliation);
+
+        res.status(200).json({ message: "Request accepted" });
+
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "internal server error" });
+    }
+});
+
 
 // Hr reject request
 router.patch('/:id/reject', verifyJWT, verifyRole('hr'), async (req, res) => {

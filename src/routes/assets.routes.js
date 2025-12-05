@@ -1,21 +1,24 @@
-import express, { Router } from 'express';
+import { Router } from 'express';
 import { verifyJWT, verifyRole } from '../middlewares/auth.js';
 import { getDB } from '../config/db.js';
 import { ObjectId } from 'mongodb';
 
 const router = Router();
 
-// create a asset
+// create an asset
 router.post('/create', verifyJWT, verifyRole('hr'), async (req, res) => {
-    
-    const { productName, productImage, productType, productQuantity, availableQuantity, hrEmail, companyName } = req.body;
-    if(!productName || !productImage || !productType || !productQuantity || !availableQuantity || !hrEmail || !companyName ) {
-        return res.status(401).json({ message: "Mission data" });
+    const { productName, productImage, productType, productQuantity, availableQuantity } = req.body;
+    if (!productName || !productImage || !productType || !productQuantity || !availableQuantity) {
+        return res.status(401).json({ message: "Missing data" });
     }
 
     try {
         const db = getDB();
         const assetsCollection = db.collection('assets');
+        const hrCollection = db.collection('hrs');
+
+        const email = req.user.email;
+        const hrDetails = await hrCollection.findOne({ email });
 
         const newAsset = {
             productName,
@@ -24,39 +27,20 @@ router.post('/create', verifyJWT, verifyRole('hr'), async (req, res) => {
             productQuantity,
             availableQuantity,
             dateAdded: new Date(),
-            hrEmail,
-            companyName,
-        }
-        
-        const result = await assetsCollection.insertOne(newAsset);
+            hrEmail: email,
+            companyName: hrDetails.companyName,
+        };
 
-        res.status(201).json({ message: "Asset created successfully" })
-    }
-    catch(err) {
+        await assetsCollection.insertOne(newAsset);
+
+        res.status(201).json({ message: "Asset created successfully" });
+    } catch (err) {
         console.log(err);
-        res.status(500).json({ message: "internal server error" });
+        res.status(500).json({ message: "Internal server error" });
     }
-})
+});
 
-
-// get a single asset
-router.get('/:id', verifyJWT, verifyRole('employee', 'hr'), async (req, res) => {
-    try {
-        const { id } = req.params;
-        const db = getDB();
-        const assetsCollection = db.collection('assets')
-
-        const result = await assetsCollection.findOne({ _id: new ObjectId(id) });
-
-        res.status(200).json(result);
-    }
-    catch(err) {
-        console.log(err);
-        res.status(500).json({ message: "Internal Server error" });
-    }
-})
-
-// get assets of a hr
+// get assets of a hr 
 router.get('/hr/:email', verifyJWT, verifyRole('hr'), async (req, res) => {
     const { email } = req.params;
 
@@ -66,15 +50,36 @@ router.get('/hr/:email', verifyJWT, verifyRole('hr'), async (req, res) => {
 
         const hrAssets = await assetsCollection.find({ hrEmail: email }).toArray();
 
-        console.log(hrAssets)
-        if(hrAssets) res.status(200).json(hrAssets);
-    }
-    catch (err) {
+        res.status(200).json(hrAssets);
+    } catch (err) {
         console.log(err);
-        res.status(500).json({ message: "internal server error"})
+        res.status(500).json({ message: "Internal server error" });
     }
-})
+});
 
+// get a single asset
+router.get('/:id', verifyJWT, verifyRole('employee', 'hr'), async (req, res) => {
+    const { id } = req.params;
 
+    if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid asset ID" });
+    }
+
+    try {
+        const db = getDB();
+        const assetsCollection = db.collection('assets');
+
+        const asset = await assetsCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!asset) {
+            return res.status(404).json({ message: "Asset not found" });
+        }
+
+        res.status(200).json(asset);
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
 
 export default router;

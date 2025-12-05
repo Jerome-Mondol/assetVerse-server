@@ -1,7 +1,6 @@
 import express from 'express'
 import { getDB } from '../config/db.js';
 import { generateToken } from '../utils/jwt.js';
-import { verifyJWT, verifyRole } from '../middlewares/auth.js';
 
 
 
@@ -15,7 +14,7 @@ router.post('/hr/register', async (req, res) => {
 
     try {
         const db = getDB();
-        const hrCollection = db.collection("HRs");
+        const hrCollection = db.collection("hrs");
         const usersCollection = db.collection("users");
 
 
