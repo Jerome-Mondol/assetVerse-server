@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
-
+// Create Request 
 router.post('/asset/:id', verifyJWT, verifyRole('employee'), async (req, res) => {
     const { note } = req.body;
     
@@ -46,6 +46,9 @@ router.post('/asset/:id', verifyJWT, verifyRole('employee'), async (req, res) =>
         res.status(500).json({ message: "Internal Server error" });
     }
 })
+
+// Hr accept request 
+
 
 
 export default router;
