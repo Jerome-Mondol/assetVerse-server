@@ -135,8 +135,5 @@ router.post('/login', async (req, res) => {
     }
 })
 
-router.get('/hr/dashboard', verifyJWT, verifyRole('hr'), (req, res) => {
-    res.send("HR dashboard")
-})
 
 export default router;
