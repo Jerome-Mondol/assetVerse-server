@@ -20,11 +20,9 @@ router.post('/asset/:id', verifyJWT, verifyRole('employee'), async (req, res) =>
 
         const requestSentBy = await usersCollection.findOne({ _id: new ObjectId(userID) })
         const asset = await assetsCollection.findOne({ _id: new ObjectId(id) })
-        console.log(asset);
-        console.log(requestSentBy);
 
         const newRequest = {
-            assetId: id,
+            assetId: new ObjectId(id),
             assetName: asset.productName,
             assetType: asset.productType,
             requesterName: requestSentBy.name,
@@ -56,6 +54,8 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
         const requestsCollection = db.collection('requests');
         const affiliationCollection = db.collection('affiliations');
         const hrCollection = db.collection('hrs');
+        const assetsCollection = db.collection('assets')
+        const assignedAssetsCollection = db.collection('assignedAssets');
 
         
         const request = await requestsCollection.findOne({ _id: new ObjectId(id) });
@@ -65,7 +65,7 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
         if(request.requestStatus !== 'pending') return res.status(400).json({ message: "Decision already given" })
 
         const companyDetails = await hrCollection.findOne({ email: request.hrEmail });
-
+        const asset = await assetsCollection.findOne({ _id: new Object(request.assetId) })
         await requestsCollection.updateOne(
             { _id: new ObjectId(id) },
             {
@@ -79,7 +79,6 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
 
 
 
-
         const affiliation = {
             employeeEmail: request.requesterEmail,
             employeeName: request.requesterName,
@@ -88,10 +87,23 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             companyLogo: companyDetails.companyLogo,
             affiliationDate: new Date(),
             status: 'active',
+        }   
+
+        const assignedAsset = {
+            assetId: new ObjectId(asset._id),
+            assetName: asset.productName,
+            assetType: asset.productType,
+            assetImage: asset.productImage,
+            employeeEmail: request.requesterEmail,
+            employeeName: request.requesterName,
+            hrEmail: request.hrEmail,
+            companyName: request.companyName,
+            assignmentDate: new Date(),
+            returnDate: null,
+            status: 'assigned',
         }
 
-
-
+        await assignedAssetsCollection.insertOne(assignedAsset)
         await affiliationCollection.insertOne(affiliation);
 
         res.status(200).json({ message: "Request accepted" });
