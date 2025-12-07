@@ -31,9 +31,9 @@ router.post('/create', verifyJWT, verifyRole('hr'), async (req, res) => {
             companyName: hrDetails.companyName,
         };
 
-        await assetsCollection.insertOne(newAsset);
+        const createdAsset = await assetsCollection.insertOne(newAsset);
 
-        res.status(201).json({ message: "Asset created successfully" });
+        res.status(201).json({ message: "Asset created successfully",  createdAsset});
     } catch (err) {
         console.log(err);
         res.status(500).json({ message: "Internal server error" });

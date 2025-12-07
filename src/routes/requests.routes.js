@@ -36,8 +36,8 @@ router.post('/asset/:id', verifyJWT, verifyRole('employee'), async (req, res) =>
             processedBy: 'pending'
         }
 
-        const result = requestsCollection.insertOne(newRequest);
-        res.status(201).json({ message: "Request sent successfully" });
+        const result = await requestsCollection.insertOne(newRequest);
+        res.status(201).json({ message: "Request sent successfully", result });
     }
     catch (err) {
         console.log(err);
@@ -65,7 +65,8 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
         if(request.requestStatus !== 'pending') return res.status(400).json({ message: "Decision already given" })
 
         const companyDetails = await hrCollection.findOne({ email: request.hrEmail });
-        const asset = await assetsCollection.findOne({ _id: new Object(request.assetId) })
+        const asset = await assetsCollection.findOne({ _id: new ObjectId(request.assetId) })
+        const currentAffiliation = await affiliationCollection.findOne({ employeeEmail: request.requesterEmail });
         await requestsCollection.updateOne(
             { _id: new ObjectId(id) },
             {
@@ -76,6 +77,16 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
                 }
             }
         );
+
+        await assetsCollection.updateOne(
+            { _id : new ObjectId(asset._id) },
+            {
+                $set: {
+                    availableQuantity: asset.availableQuantity - 1,
+                }
+            }
+        )
+
 
 
 
@@ -103,10 +114,11 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             status: 'assigned',
         }
 
-        await assignedAssetsCollection.insertOne(assignedAsset)
-        await affiliationCollection.insertOne(affiliation);
 
-        res.status(200).json({ message: "Request accepted" });
+        if(!currentAffiliation) await affiliationCollection.insertOne(affiliation);
+        await assignedAssetsCollection.insertOne(assignedAsset)
+    
+        res.status(200).json({ message: "Request accepted", currentAffiliation });
 
     } catch (err) {
         console.log(err);
