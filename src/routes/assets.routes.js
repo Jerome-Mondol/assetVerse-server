@@ -40,26 +40,9 @@ router.post('/create', verifyJWT, verifyRole('hr'), async (req, res) => {
     }
 });
 
-// get assets of a hr 
-router.get('/hr/:email', verifyJWT, verifyRole('hr'), async (req, res) => {
-    const { email } = req.params;
-
-    try {
-        const db = getDB();
-        const assetsCollection = db.collection('assets');
-
-        const hrAssets = await assetsCollection.find({ hrEmail: email }).toArray();
-
-        res.status(200).json(hrAssets);
-    } catch (err) {
-        console.log(err);
-        res.status(500).json({ message: "Internal server error" });
-    }
-});
-
 // get a single asset
-router.get('/:id', verifyJWT, verifyRole('employee', 'hr'), async (req, res) => {
-    const { id } = req.params;
+router.get('/asset', verifyJWT, verifyRole('employee', 'hr'), async (req, res) => {
+    const { id } = req.query;
 
     if (!ObjectId.isValid(id)) {
         return res.status(400).json({ message: "Invalid asset ID" });
@@ -81,5 +64,49 @@ router.get('/:id', verifyJWT, verifyRole('employee', 'hr'), async (req, res) => 
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
+// get assets of a hr 
+router.get('/hr', verifyJWT, verifyRole('hr'), async (req, res) => {
+    const { email } = req.query;
+
+    try {
+        const db = getDB();
+        const assetsCollection = db.collection('assets');
+
+        const hrAssets = await assetsCollection.find({ hrEmail: email }).toArray();
+
+        res.status(200).json(hrAssets);
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+router.delete('/delete', verifyJWT, verifyRole('hr'), async (req, res) => {
+    const { id } = req.query;
+    
+    try {
+        const db = getDB();
+        const assetsCollection = db.collection('assets');
+
+        const { email } = req.user;
+        const assetToDelete = await assetsCollection.findOne({ _id: new ObjectId(id) });
+        if(!email || !assetToDelete) {
+            res.status(400).json({ message: "Bad request" });
+        }
+        if(assetToDelete.hrEmail !== email) {
+            res.status(403).json({ message: "Forbidden" });
+        }
+        
+        const deletedOne = await assetsCollection.deleteOne({ _id: new ObjectId(id) })
+        res.status(200).json({ message: "Deleted successfully" });
+    }
+    catch(err) {
+        console.log(err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+})
+
+
 
 export default router;
