@@ -1,8 +1,10 @@
 import express from 'express'
+import cors from 'cors'
 import healthRoutes from './routes/health.routes.js'
 import authRoutes from './routes/auth.routes.js'
 import assetsRoutes from './routes/assets.routes.js'
 import requestRoutes from './routes/requests.routes.js'
+import userRoutes from './routes/users.routes.js'
 import { connectDB } from './config/db.js';
 
 
@@ -13,6 +15,7 @@ const PORT = process.env.PORT;
 
 // Middlewares 
 app.use(express.json());
+app.use(cors());
 
 
 const startServer = async () => {
@@ -23,7 +26,8 @@ const startServer = async () => {
         app.use('/', healthRoutes);
         app.use('/auth', authRoutes);
         app.use('/assets', assetsRoutes);
-        app.use('/request', requestRoutes)
+        app.use('/request', requestRoutes);
+        app.use('/users', userRoutes)
 
         app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 

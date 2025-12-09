@@ -111,9 +111,9 @@ router.post('/employee/register', async (req, res) => {
 
 
 router.post('/login', async (req, res) => {
-    const { email } = req.body;
+    const { email } = req.query;
 
-    if (!email) return res.status(400).json({ message: "Email    required" });
+    if (!email) return res.status(400).json({ message: "Email required" });
 
     try {
         const db = getDB();

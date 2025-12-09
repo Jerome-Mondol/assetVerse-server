@@ -67,6 +67,7 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
         const companyDetails = await hrCollection.findOne({ email: request.hrEmail });
         const asset = await assetsCollection.findOne({ _id: new ObjectId(request.assetId) })
         const currentAffiliation = await affiliationCollection.findOne({ hrEmail: request.hrEmail });
+        const hr = await hrCollection.findOne({ email: request.hrEmail });
         await requestsCollection.updateOne(
             { _id: new ObjectId(id) },
             {
@@ -87,7 +88,14 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             }
         )
 
-
+        await hrCollection.updateOne(
+            { email: hr.email },
+            {
+                $set: {
+                    currentEmployees: hr.currentEmployees + 1,
+                }
+            }
+        )
 
 
         const affiliation = {
