@@ -40,6 +40,20 @@ router.post('/create', verifyJWT, verifyRole('hr'), async (req, res) => {
     }
 });
 
+// get all assets 
+router.get('/get-all-assets', verifyJWT, verifyRole('hr', 'employee'), async (req, res) => {
+    try {
+        const db = getDB();
+        const assetsCollection = db.collection('assets');
+        const assets = await assetsCollection.find({}).toArray();
+        if(assets) res.status(200).json(assets)
+    }
+    catch(err) {
+        console.log(err);
+        res.status(500).json({ message: "Internal server error" })
+    }
+})
+
 // get a single asset
 router.get('/asset', verifyJWT, verifyRole('employee', 'hr'), async (req, res) => {
     const { id } = req.query;
@@ -128,6 +142,8 @@ router.delete('/delete', verifyJWT, verifyRole('hr'), async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 })
+
+
 
 
 
