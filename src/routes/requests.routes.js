@@ -45,29 +45,39 @@ router.post('/asset', verifyJWT, verifyRole('employee'), async (req, res) => {
     }
 })
 
-// Hr accept request 
+// HR accepts request
 router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
     const { id } = req.params;
 
     try {
         const db = getDB();
+
         const requestsCollection = db.collection('requests');
-        const affiliationCollection = db.collection('affiliations');
+        const affiliationsCollection = db.collection('affiliations');
         const hrCollection = db.collection('hrs');
-        const assetsCollection = db.collection('assets')
+        const assetsCollection = db.collection('assets');
         const assignedAssetsCollection = db.collection('assignedAssets');
 
-        
+        // --- Fetch the request ---
         const request = await requestsCollection.findOne({ _id: new ObjectId(id) });
         if (!request) {
             return res.status(404).json({ message: "Request not found" });
         }
-        if(request.requestStatus !== 'pending') return res.status(400).json({ message: "Decision already given" })
 
-        const companyDetails = await hrCollection.findOne({ email: request.hrEmail });
-        const asset = await assetsCollection.findOne({ _id: new ObjectId(request.assetId) })
-        const currentAffiliation = await affiliationCollection.findOne({ employeeEmail: request.requesterEmail });
+        if (request.requestStatus !== 'pending') {
+            return res.status(400).json({ message: "Decision already given" });
+        }
+
+        // --- Fetch related data ---
         const hr = await hrCollection.findOne({ email: request.hrEmail });
+        const companyDetails = hr;   // You used hrCollection for both company + hr info
+        const asset = await assetsCollection.findOne({ _id: new ObjectId(request.assetId) });
+
+        const currentAffiliation = await affiliationsCollection.findOne({
+            employeeEmail: request.requesterEmail
+        });
+
+        // --- Update request ---
         await requestsCollection.updateOne(
             { _id: new ObjectId(id) },
             {
@@ -79,26 +89,28 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             }
         );
 
+        // --- Update asset quantity ---
         await assetsCollection.updateOne(
-            { _id : new ObjectId(asset._id) },
+            { _id: new ObjectId(asset._id) },
             {
                 $set: {
-                    availableQuantity: asset.availableQuantity - 1,
+                    availableQuantity: asset.availableQuantity - 1
                 }
             }
-        )
+        );
 
+        // --- Update HR employee count ---
         await hrCollection.updateOne(
             { email: hr.email },
             {
                 $set: {
-                    currentEmployees: hr.currentEmployees + 1,
+                    currentEmployees: hr.currentEmployees + 1
                 }
             }
-        )
+        );
 
-
-        const affiliation = {
+        // --- Prepare new affiliation object ---
+        const newAffiliation = {
             employeeEmail: request.requesterEmail,
             employeeName: request.requesterName,
             hrEmail: request.hrEmail,
@@ -106,8 +118,14 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             companyLogo: companyDetails.companyLogo,
             affiliationDate: new Date(),
             status: 'active',
-        }   
+        };
 
+        // --- Add affiliation only if: none exists OR existing is inactive ---
+        if (!currentAffiliation || currentAffiliation.status === "inactive") {
+            await affiliationsCollection.insertOne(newAffiliation);
+        }
+
+        // --- Prepare assigned asset record ---
         const assignedAsset = {
             assetId: new ObjectId(asset._id),
             assetName: asset.productName,
@@ -120,13 +138,17 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             assignmentDate: new Date(),
             returnDate: null,
             status: 'assigned',
-        }
+        };
 
+        // --- Insert assigned asset entry ---
+        await assignedAssetsCollection.insertOne(assignedAsset);
 
-        if(!currentAffiliation) await affiliationCollection.insertOne(affiliation);
-        await assignedAssetsCollection.insertOne(assignedAsset)
-    
-        res.status(200).json({ message: "Request accepted", currentAffiliation });
+        // --- Final Response ---
+        res.status(200).json({
+            message: "Request accepted",
+            affiliationExists: !!currentAffiliation,
+            affiliationWasInactive: currentAffiliation?.status === "inactive"
+        });
 
     } catch (err) {
         console.log(err);

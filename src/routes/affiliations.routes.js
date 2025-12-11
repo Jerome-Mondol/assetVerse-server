@@ -9,17 +9,22 @@ router.get('/affiliation', verifyJWT, verifyRole('hr'), async (req, res) => {
     try {
         const db = getDB();
         const affiliationsCollection = db.collection('affiliations');
-        const affiliationOfCompany = await affiliationsCollection.find({ hrEmail: email}).toArray();
+        const affiliationOfCompany = await affiliationsCollection.find({
+            hrEmail: email,
+            status: "active"
+        }).toArray();
 
-        if(affiliationOfCompany) res.status(200).json(affiliationOfCompany);
+        
+
+        if (affiliationOfCompany) res.status(200).json(affiliationOfCompany)
     }
-    catch(err) {
+    catch (err) {
         console.log(err);
         res.status(500).json({ message: "internal server error" });
     }
 })
 
-router.patch('/remove', verifyJWT, verifyRole('hr'), async(req, res) => {
+router.patch('/remove', verifyJWT, verifyRole('hr'), async (req, res) => {
     const { id } = req.query;
     try {
         const db = getDB();
@@ -28,7 +33,7 @@ router.patch('/remove', verifyJWT, verifyRole('hr'), async(req, res) => {
         const hrCollection = db.collection('hrs');
         const currentEmployeesOfHr = await hrCollection.findOne({ email });
 
-        
+
 
         await affiliationsCollection.updateOne(
             { _id: new ObjectId(id) },
@@ -39,7 +44,7 @@ router.patch('/remove', verifyJWT, verifyRole('hr'), async(req, res) => {
             }
         )
 
-        if(currentEmployeesOfHr) {
+        if (currentEmployeesOfHr) {
             await hrCollection.updateOne(
                 { email: email },
                 {
@@ -52,7 +57,7 @@ router.patch('/remove', verifyJWT, verifyRole('hr'), async(req, res) => {
 
         res.status(200).json({ message: "All ok" })
     }
-    catch(err) {
+    catch (err) {
         console.log(err)
         res.status(500).json({ message: "internal server error" });
     }
