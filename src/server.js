@@ -30,6 +30,7 @@ const startServer = async () => {
         app.use('/request', requestRoutes);
         app.use('/users', userRoutes)
         app.use('/affiliations', affiliationsRoute)
+        app.use('/assigned', (await import('./routes/assignedAssets.routes.js')).default)
 
         app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 

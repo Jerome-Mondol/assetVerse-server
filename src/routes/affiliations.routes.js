@@ -5,18 +5,21 @@ import { ObjectId } from 'mongodb';
 const router = express.Router();
 
 router.get('/affiliation', verifyJWT, verifyRole('hr'), async (req, res) => {
-    const { email } = req.query;
+    const { email, page = 1, limit = 10 } = req.query;
     try {
         const db = getDB();
         const affiliationsCollection = db.collection('affiliations');
-        const affiliationOfCompany = await affiliationsCollection.find({
-            hrEmail: email,
-            status: "active"
-        }).toArray();
 
-        
+        const pageNum = parseInt(page, 10) || 1;
+        const lim = parseInt(limit, 10) || 10;
+        const skip = (pageNum - 1) * lim;
 
-        if (affiliationOfCompany) res.status(200).json(affiliationOfCompany)
+        const [items, total] = await Promise.all([
+            affiliationsCollection.find({ hrEmail: email, status: 'active' }).skip(skip).limit(lim).toArray(),
+            affiliationsCollection.countDocuments({ hrEmail: email, status: 'active' })
+        ]);
+
+        res.status(200).json({ items, total, page: pageNum, limit: lim });
     }
     catch (err) {
         console.log(err);
@@ -25,37 +28,68 @@ router.get('/affiliation', verifyJWT, verifyRole('hr'), async (req, res) => {
 })
 
 router.patch('/remove', verifyJWT, verifyRole('hr'), async (req, res) => {
+    // expects affiliation id in query: ?id=<affiliationId>
     const { id } = req.query;
+    if (!id || !ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Invalid affiliation id' });
+    }
+
     try {
         const db = getDB();
-        const { email } = req.user;
+        const { email } = req.user; // logged in hr
         const affiliationsCollection = db.collection('affiliations');
         const hrCollection = db.collection('hrs');
-        const currentEmployeesOfHr = await hrCollection.findOne({ email });
+        const assignedAssetsCollection = db.collection('assignedAssets');
+        const assetsCollection = db.collection('assets');
 
+        // find the affiliation record
+        const affiliation = await affiliationsCollection.findOne({ _id: new ObjectId(id) });
+        if (!affiliation) return res.status(404).json({ message: 'Affiliation not found' });
 
+        // ensure the requesting HR owns this affiliation
+        if (affiliation.hrEmail !== email) return res.status(403).json({ message: 'Forbidden' });
 
+        // mark affiliation inactive
         await affiliationsCollection.updateOne(
             { _id: new ObjectId(id) },
-            {
-                $set: {
-                    status: 'inactive',
-                }
-            }
-        )
+            { $set: { status: 'inactive' } }
+        );
 
-        if (currentEmployeesOfHr) {
-            await hrCollection.updateOne(
-                { email: email },
-                {
-                    $set: {
-                        currentEmployees: currentEmployeesOfHr.currentEmployees - 1
-                    }
+        // find any assigned assets for this employee under this HR that are still assigned
+        const assignedAssets = await assignedAssetsCollection.find({
+            employeeEmail: affiliation.employeeEmail,
+            hrEmail: affiliation.hrEmail,
+            status: 'assigned'
+        }).toArray();
+
+        // for each assigned asset, mark returned and increment asset availability
+        for (const a of assignedAssets) {
+            try {
+                await assignedAssetsCollection.updateOne(
+                    { _id: a._id },
+                    { $set: { status: 'returned', returnDate: new Date() } }
+                );
+
+                if (a.assetId) {
+                    await assetsCollection.updateOne(
+                        { _id: new ObjectId(a.assetId) },
+                        { $inc: { availableQuantity: 1 } }
+                    );
                 }
-            )
+            } catch (innerErr) {
+                console.log('Error updating assigned asset', innerErr);
+                // continue processing others
+            }
         }
 
-        res.status(200).json({ message: "All ok" })
+        // safely decrement hr currentEmployees
+        const hrDoc = await hrCollection.findOne({ email });
+        if (hrDoc) {
+            const newCount = Math.max(0, (hrDoc.currentEmployees || 0) - 1);
+            await hrCollection.updateOne({ email }, { $set: { currentEmployees: newCount } });
+        }
+
+        res.status(200).json({ message: 'Affiliation removed' });
     }
     catch (err) {
         console.log(err)

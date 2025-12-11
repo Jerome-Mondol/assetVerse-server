@@ -68,13 +68,32 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             return res.status(400).json({ message: "Decision already given" });
         }
 
+        // ensure the logged-in HR is the owner of this request
+        if (req.user.email !== request.hrEmail) {
+            return res.status(403).json({ message: "Forbidden: cannot act on this request" });
+        }
+
         // --- Fetch related data ---
         const hr = await hrCollection.findOne({ email: request.hrEmail });
-        const companyDetails = hr;   // You used hrCollection for both company + hr info
-        const asset = await assetsCollection.findOne({ _id: new ObjectId(request.assetId) });
+        if (!hr) return res.status(404).json({ message: 'HR not found' });
 
+        const asset = await assetsCollection.findOne({ _id: new ObjectId(request.assetId) });
+        if (!asset) return res.status(404).json({ message: 'Asset not found' });
+
+        // availability check
+        if ((asset.availableQuantity || 0) <= 0) {
+            return res.status(400).json({ message: 'No available items to assign' });
+        }
+
+        // package limit enforcement
+        if ((hr.currentEmployees || 0) >= (hr.packageLimit || 0)) {
+            return res.status(400).json({ message: 'Package limit reached. Upgrade required' });
+        }
+
+        // --- Check existing affiliation scoped by employee + hr ---
         const currentAffiliation = await affiliationsCollection.findOne({
-            employeeEmail: request.requesterEmail
+            employeeEmail: request.requesterEmail,
+            hrEmail: request.hrEmail
         });
 
         // --- Update request ---
@@ -89,40 +108,34 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             }
         );
 
-        // --- Update asset quantity ---
+        // --- Atomically decrement asset availability ---
         await assetsCollection.updateOne(
-            { _id: new ObjectId(asset._id) },
-            {
-                $set: {
-                    availableQuantity: asset.availableQuantity - 1
-                }
-            }
+            { _id: new ObjectId(asset._id), availableQuantity: { $gt: 0 } },
+            { $inc: { availableQuantity: -1 } }
         );
 
-        // --- Update HR employee count ---
-        await hrCollection.updateOne(
-            { email: hr.email },
-            {
-                $set: {
-                    currentEmployees: hr.currentEmployees + 1
-                }
-            }
-        );
-
-        // --- Prepare new affiliation object ---
-        const newAffiliation = {
-            employeeEmail: request.requesterEmail,
-            employeeName: request.requesterName,
-            hrEmail: request.hrEmail,
-            companyName: companyDetails.companyName,
-            companyLogo: companyDetails.companyLogo,
-            affiliationDate: new Date(),
-            status: 'active',
-        };
-
-        // --- Add affiliation only if: none exists OR existing is inactive ---
+        // --- Only increment HR employee count if new affiliation will be created ---
+        let affiliationCreated = false;
         if (!currentAffiliation || currentAffiliation.status === "inactive") {
+            const newAffiliation = {
+                employeeEmail: request.requesterEmail,
+                employeeName: request.requesterName,
+                hrEmail: request.hrEmail,
+                companyName: hr.companyName,
+                companyLogo: hr.companyLogo,
+                affiliationDate: new Date(),
+                status: 'active',
+            };
+
             await affiliationsCollection.insertOne(newAffiliation);
+            affiliationCreated = true;
+        }
+
+        if (affiliationCreated) {
+            await hrCollection.updateOne(
+                { email: hr.email },
+                { $inc: { currentEmployees: 1 } }
+            );
         }
 
         // --- Prepare assigned asset record ---
@@ -146,8 +159,7 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
         // --- Final Response ---
         res.status(200).json({
             message: "Request accepted",
-            affiliationExists: !!currentAffiliation,
-            affiliationWasInactive: currentAffiliation?.status === "inactive"
+            affiliationCreated
         });
 
     } catch (err) {
@@ -155,7 +167,6 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
         res.status(500).json({ message: "internal server error" });
     }
 });
-
 
 // Hr reject request
 router.patch('/:id/reject', verifyJWT, verifyRole('hr'), async (req, res) => {
