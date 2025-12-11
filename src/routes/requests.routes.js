@@ -5,9 +5,9 @@ import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
-// Create Request 
-router.post('/asset/:id', verifyJWT, verifyRole('employee'), async (req, res) => {
-    const { note } = req.body;
+// Send Request 
+router.post('/asset', verifyJWT, verifyRole('employee'), async (req, res) => {
+    // const { note } = req.body;
 
 
     try {
@@ -15,7 +15,7 @@ router.post('/asset/:id', verifyJWT, verifyRole('employee'), async (req, res) =>
         const requestsCollection = db.collection('requests');
         const assetsCollection = db.collection('assets');
         const usersCollection = db.collection('users');
-        const { id } = req.params;
+        const { id } = req.query;
         const userID = req.user.id;
 
         const requestSentBy = await usersCollection.findOne({ _id: new ObjectId(userID) })
@@ -29,7 +29,7 @@ router.post('/asset/:id', verifyJWT, verifyRole('employee'), async (req, res) =>
             requesterEmail: requestSentBy.email,
             hrEmail: asset.hrEmail,
             companyName: asset.companyName,
-            note,
+            note: "Hello",
             requestDate: new Date(),
             approvalDate: null,
             requestStatus: 'pending',
@@ -159,6 +159,25 @@ router.patch('/:id/reject', verifyJWT, verifyRole('hr'), async (req, res) => {
     catch (err) {
         console.log(err);
         res.status(500).json({ message: "internal server error" })
+    }
+})
+
+// Get all request as HR
+router.get('/all-requests', verifyJWT, verifyRole('hr'), async (req, res) => {
+    const { email } = req.query;
+    const userEmail = req.user.email;
+
+    if(email !== userEmail) res.status(403).json({ message: "Forbidden" });
+
+    try {
+        const db = getDB();
+        const requestsCollection = db.collection('requests');
+        const requestOfHR = await requestsCollection.find({ hrEmail: email }).toArray();
+        if(requestOfHR) res.status(200).json(requestOfHR); 
+    }
+    catch(err) {
+        console.log(err)
+        res.status(500).json({ message: "internal server error" });
     }
 })
 
