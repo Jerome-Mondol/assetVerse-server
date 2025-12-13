@@ -7,6 +7,7 @@ import requestRoutes from './routes/requests.routes.js'
 import userRoutes from './routes/users.routes.js'
 import affiliationsRoute from './routes/affiliations.routes.js'
 import pricingRoutes from './routes/pricing.routes.js'
+import stripeRoutes from './routes/stripe.routes.js'
 import { connectDB } from './config/db.js';
 
 
@@ -32,6 +33,7 @@ const startServer = async () => {
         app.use('/users', userRoutes)
         app.use('/affiliations', affiliationsRoute)
         app.use('/pricing', pricingRoutes)
+        app.use('/stripe', stripeRoutes)
         app.use('/assigned', (await import('./routes/assignedAssets.routes.js')).default)
 
         app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
