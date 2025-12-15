@@ -42,27 +42,22 @@ router.patch('/remove', verifyJWT, verifyRole('hr'), async (req, res) => {
         const assignedAssetsCollection = db.collection('assignedAssets');
         const assetsCollection = db.collection('assets');
 
-        // find the affiliation record
         const affiliation = await affiliationsCollection.findOne({ _id: new ObjectId(id) });
         if (!affiliation) return res.status(404).json({ message: 'Affiliation not found' });
 
-        // ensure the requesting HR owns this affiliation
         if (affiliation.hrEmail !== email) return res.status(403).json({ message: 'Forbidden' });
 
-        // mark affiliation inactive
         await affiliationsCollection.updateOne(
             { _id: new ObjectId(id) },
             { $set: { status: 'inactive' } }
         );
 
-        // find any assigned assets for this employee under this HR that are still assigned
         const assignedAssets = await assignedAssetsCollection.find({
             employeeEmail: affiliation.employeeEmail,
             hrEmail: affiliation.hrEmail,
             status: 'assigned'
         }).toArray();
 
-        // for each assigned asset, mark returned and increment asset availability
         for (const a of assignedAssets) {
             try {
                 await assignedAssetsCollection.updateOne(
@@ -78,11 +73,9 @@ router.patch('/remove', verifyJWT, verifyRole('hr'), async (req, res) => {
                 }
             } catch (innerErr) {
                 console.log('Error updating assigned asset', innerErr);
-                // continue processing others
             }
         }
 
-        // safely decrement hr currentEmployees
         const hrDoc = await hrCollection.findOne({ email });
         if (hrDoc) {
             const newCount = Math.max(0, (hrDoc.currentEmployees || 0) - 1);

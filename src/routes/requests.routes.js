@@ -5,9 +5,7 @@ import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
-// Send Request 
 router.post('/asset', verifyJWT, verifyRole('employee'), async (req, res) => {
-    // const { note } = req.body;
 
 
     try {
@@ -68,35 +66,29 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             return res.status(400).json({ message: "Decision already given" });
         }
 
-        // ensure the logged-in HR is the owner of this request
         if (req.user.email !== request.hrEmail) {
             return res.status(403).json({ message: "Forbidden: cannot act on this request" });
         }
 
-        // --- Fetch related data ---
         const hr = await hrCollection.findOne({ email: request.hrEmail });
         if (!hr) return res.status(404).json({ message: 'HR not found' });
 
         const asset = await assetsCollection.findOne({ _id: new ObjectId(request.assetId) });
         if (!asset) return res.status(404).json({ message: 'Asset not found' });
 
-        // availability check
         if ((asset.availableQuantity || 0) <= 0) {
             return res.status(400).json({ message: 'No available items to assign' });
         }
 
-        // package limit enforcement
         if ((hr.currentEmployees || 0) >= (hr.packageLimit || 0)) {
             return res.status(400).json({ message: 'Package limit reached. Upgrade required' });
         }
 
-        // --- Check existing affiliation scoped by employee + hr ---
         const currentAffiliation = await affiliationsCollection.findOne({
             employeeEmail: request.requesterEmail,
             hrEmail: request.hrEmail
         });
 
-        // --- Update request ---
         await requestsCollection.updateOne(
             { _id: new ObjectId(id) },
             {
@@ -108,13 +100,11 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             }
         );
 
-        // --- Atomically decrement asset availability ---
         await assetsCollection.updateOne(
             { _id: new ObjectId(asset._id), availableQuantity: { $gt: 0 } },
             { $inc: { availableQuantity: -1 } }
         );
 
-        // --- Only increment HR employee count if new affiliation will be created ---
         let affiliationCreated = false;
         if (!currentAffiliation || currentAffiliation.status === "inactive") {
             const newAffiliation = {
@@ -138,7 +128,6 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             );
         }
 
-        // --- Prepare assigned asset record ---
         const assignedAsset = {
             assetId: new ObjectId(asset._id),
             assetName: asset.productName,
@@ -153,10 +142,8 @@ router.patch('/:id/accept', verifyJWT, verifyRole('hr'), async (req, res) => {
             status: 'assigned',
         };
 
-        // --- Insert assigned asset entry ---
         await assignedAssetsCollection.insertOne(assignedAsset);
 
-        // --- Final Response ---
         res.status(200).json({
             message: "Request accepted",
             affiliationCreated

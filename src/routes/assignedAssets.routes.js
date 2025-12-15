@@ -5,7 +5,6 @@ import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
-// Employee returns an assigned asset
 router.patch('/return', verifyJWT, verifyRole('employee'), async (req, res) => {
   const { id } = req.query;
   if (!id || !ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' });
@@ -18,18 +17,15 @@ router.patch('/return', verifyJWT, verifyRole('employee'), async (req, res) => {
     const assigned = await assignedAssetsCollection.findOne({ _id: new ObjectId(id) });
     if (!assigned) return res.status(404).json({ message: 'Assigned asset not found' });
 
-    // ensure the employee owns this assigned asset
     if (assigned.employeeEmail !== req.user.email) return res.status(403).json({ message: 'Forbidden' });
 
     if (assigned.status === 'returned') return res.status(400).json({ message: 'Asset already returned' });
 
-    // mark as returned
     await assignedAssetsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $set: { status: 'returned', returnDate: new Date() } }
     );
 
-    // increment asset availableQuantity if possible
     if (assigned.assetId) {
       try {
         await assetsCollection.updateOne(
@@ -47,5 +43,42 @@ router.patch('/return', verifyJWT, verifyRole('employee'), async (req, res) => {
     res.status(500).json({ message: 'internal server error' });
   }
 });
+
+// assign e new asset
+router.post('/assign-assets', verifyJWT, verifyRole('hr'), async(req, res) => {
+  const { employeeEmail, hrEmail, assetId } = req.body;
+  if(!employeeEmail || !assetId || !hrEmail) res.status(404).json({ message: "All info required" })
+  try {
+    const db = getDB();
+    const assignedAssetsCollection = db.collection('assignedAssets');
+    const assetsCollection = db.collection('assets');
+    const hrsCollection = db.collection('hrs');
+
+    const assetData = await assetsCollection.findOne({ _id: new ObjectId(assetId) });
+    const hrData = await hrsCollection.findOne({ email: hrEmail })
+
+    const newAssignedAsset = {
+      assetId,
+      assetName: assetData.productName,
+      assetType: assetData.productType,
+      assetImage: assetData.productImage,
+      employeeEmail,
+      hrEmail,
+      companyName: hrData.companyName,
+      assignmentDate: new Date(),
+      returnDate: null,
+      status: 'assigned' 
+    }
+
+    const assignNewAsset = await assignedAssetsCollection.insertOne(newAssignedAsset);
+
+    res.status(200).json({ message: "Asset assigned successfully" });
+
+  }
+  catch(err) {
+    console.log(err);
+    res.status(500).json({ message: "internal server error  " })
+  }
+})
 
 export default router;
