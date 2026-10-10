@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/server.js",
   "scripts": {
-    "build": "node src/server.js",
+    "build": "node api.js && node src/server.js",
     "dev": "node api.js && nodemon src/server.js"
   },
   "keywords": [],
